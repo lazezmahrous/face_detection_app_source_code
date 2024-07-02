@@ -11,8 +11,11 @@ class PersonModel extends HiveObject {
   final String id;
   @HiveField(1)
   final Uint8List image;
+  @HiveField(2)
+  final int faces;
   PersonModel({
     required this.id,
     required this.image,
+    required this.faces,
   });
 }

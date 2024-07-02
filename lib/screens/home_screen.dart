@@ -1,9 +1,6 @@
 import 'dart:io';
-// import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/database/sqldb.dart';
 import 'package:flutter_application_1/models/person_model.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -19,11 +16,20 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   File? _image;
   List<Face> faces = [];
-  Map<String, dynamic> facialFeatures = {}; // To store extracted features
+  Map<String, dynamic> facialFeatures = {};
 
-  Future _pickImage({required ImageSource source}) async {
+  Future _pickImage() async {
+    final selectedSource = await showAlertDialog(
+      context: context,
+      title: 'إختار مصدر الصورة',
+      body: 'عايز تحمل الصوره منين ؟',
+      actionsTextButtonOne: 'المعرض',
+      actionsTextButtonTow: 'الكاميرا',
+      icon: const Icon(Icons.info),
+    );
+
     try {
-      final image = await ImagePicker().pickImage(source: source);
+      final image = await ImagePicker().pickImage(source: selectedSource!);
       if (image == null) return;
       {
         setState(() {
@@ -37,6 +43,34 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<ImageSource?> showAlertDialog({
+    required BuildContext context,
+    required String title,
+    required String body,
+    required String actionsTextButtonOne,
+    required String actionsTextButtonTow,
+    required Icon icon,
+  }) async {
+    return await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, ImageSource.gallery),
+            child: Text(actionsTextButtonOne),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, ImageSource.camera),
+            child: Text(actionsTextButtonTow),
+          ),
+        ],
+        icon: icon,
+      ),
+    );
+  }
+
   Future _detectFaces({required File img}) async {
     final options = FaceDetectorOptions();
     final faceDetector = FaceDetector(options: options);
@@ -45,17 +79,17 @@ class _HomeScreenState extends State<HomeScreen> {
     if (faces.isEmpty) {
       print('error');
     } else {
-      await _saveFace(img: img);
+      await _saveFace(img: img, faces: faces.length);
     }
     setState(() {});
-    // print(faces.length);
+    print(faces.length);
   }
 
-  Future _saveFace({required File img}) async {
+  Future _saveFace({required File img, required int faces}) async {
     var uuid = const Uuid();
     var farmersBox = Hive.box<PersonModel>('face_detection');
-    await farmersBox
-        .add(PersonModel(id: uuid.v4(), image: img.readAsBytesSync()));
+    await farmersBox.add(
+        PersonModel(id: uuid.v4(), image: img.readAsBytesSync(), faces: faces));
   }
 
   Future<List<PersonModel>> _getFaces() async {
@@ -66,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('HomeScreen'),
+        title: const Text('Face Detection'),
       ),
       body: ListView(
         shrinkWrap: true,
@@ -80,8 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.all(8.0),
                   child: InkWell(
                     onTap: () async {
-                      await _pickImage(source: ImageSource.camera)
-                          .then((value) {
+                      await _pickImage().then((value) {
                         if (_image != null) {
                           _detectFaces(img: _image!);
                         } else {}
@@ -97,6 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   // width: 200,
                   height: 400,
                   decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
                     image: DecorationImage(
                       image: FileImage(_image!),
                       fit: BoxFit.cover,
@@ -113,8 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: Colors.black26,
                           child: InkWell(
                             onTap: () async {
-                              await _pickImage(source: ImageSource.gallery)
-                                  .then((value) {
+                              await _pickImage().then((value) {
                                 if (_image != null) {
                                   _detectFaces(img: _image!);
                                 } else {}
@@ -128,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   size: 90,
                                 ),
                                 Text(
-                                  'شخص جديد',
+                                  'عمليه جديده',
                                   style: TextStyle(
                                     color: Colors.white,
                                   ),
@@ -141,7 +174,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-          Center(child: Text('عدد الأشخاص ${faces.length} في الصوره')),
+          Center(
+              child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text('عدد الأشخاص ${faces.length} في الصوره'),
+          )),
           const Padding(
             padding: EdgeInsets.all(8.0),
             child: Divider(
@@ -159,48 +196,73 @@ class _HomeScreenState extends State<HomeScreen> {
               } else {
                 return Column(
                   children: [
-                    Center(
-                      child: Text(
-                          'إجمالي الأشخاص بالداخل ${snapshot.data!.length}'),
-                    ),
                     GridView.builder(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
+                        crossAxisCount: 2,
                       ),
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemBuilder: (context, index) {
                         return Padding(
                           padding: const EdgeInsets.all(8.0),
-                          child: InkWell(
-                            onDoubleTap: () {
-                              snapshot.data![index].delete();
-                              setState(() {});
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                image: DecorationImage(
-                                  image:
-                                      MemoryImage(snapshot.data![index].image),
-                                  fit: BoxFit.cover,
-                                ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              image: DecorationImage(
+                                image: MemoryImage(snapshot.data![index].image),
+                                fit: BoxFit.cover,
                               ),
-                              height: 60,
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      snapshot.data![index].id,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                      ),
+                            ),
+                            height: 60,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    bottom: 0,
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          decoration: const BoxDecoration(
+                                              color: Colors.white,
+                                              shape: BoxShape.rectangle,
+                                              borderRadius: BorderRadius.all(
+                                                  Radius.circular(20))),
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                constraints:
+                                                    const BoxConstraints(
+                                                  maxWidth: 105,
+                                                ),
+                                                child: Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 5),
+                                                  child: Text(
+                                                      'تم إكتشاف ${snapshot.data![index].faces} وجه في الصوره'),
+                                                ),
+                                              ),
+                                              IconButton(
+                                                onPressed: () {
+                                                  snapshot.data![index]
+                                                      .delete();
+                                                  setState(() {});
+                                                },
+                                                icon: const Icon(
+                                                  Icons.delete,
+                                                ),
+                                                color: Colors.red,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
